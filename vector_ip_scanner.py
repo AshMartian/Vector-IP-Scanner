@@ -25,7 +25,7 @@ import threading
 from queue import Queue
 import time
 import re
-from configure import write_config
+from anki_vector.configure.__main__ import write_config
 import json
 import socket
 
