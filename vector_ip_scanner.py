@@ -19,20 +19,26 @@ Author: GrinningHermit
 import subprocess
 from subprocess import Popen, PIPE
 import sys
-import ipaddress
 from datetime import datetime
 import threading
 from queue import Queue
 import time
 import re
-from configure import write_config
+from anki_vector.configure.__main__ import write_config
 import json
 import socket
+import ipaddress
+from getmac import get_mac_address
+import configparser
+from pathlib import Path
+
+# Setup config parser for reading the sdk config
+config = configparser.ConfigParser()
 
 # Clear the screen
 subprocess.call('clear')
 
-ip_range_max = 50
+ip_range_max = 255
 vector_ip = ''
 get_mac_count = 0
 
@@ -42,10 +48,7 @@ def get_mac(ip):
     if get_mac_count < 10:
         try:
             # Display mac address of found host. Trying a couple of times as the process seems to fail sometimes
-            pid = Popen(["arp", "-n", ip], stdout = PIPE)
-            s = pid.communicate()[0]
-            mac = re.search(r"(([a-f\d]{1,2}\:){5}[a-f\d]{1,2})", str(s)).groups()[0]
-            return str(mac)
+            return get_mac_address(ip=ip, network_request=True)
 
         except:
             print('no mac id found, retrying')
@@ -80,12 +83,18 @@ try:
         vector_serial = vector['0']['serial']
         print('Config file loaded\n')
 except:
-    # prompt for data to write config if it does not exist yet
-    print('Config file not found.\n\nAn ip address must be registered to continue:\n\n1. Plug in the USB cord of Vector\'s charger for power.\n2. Start up Vector by pressing the button on his back once.\n3. Put your Vector on his charger.\n4. Raise his arm above his head and bring it down again.\n5. Enter the displayed ip address (XXX.XXX.XXX.XXX): ')
-    enter_ip()
-
-    print('6. Enter the displayed serial number (8 characters): ')
-    enter_serial()
+    try:
+        config.read(str(Path.home()) + '/.anki_vector/sdk_config.ini')
+        print("reading anki_vector sdk config")
+        vector_serial = config.sections()[0]
+        vector_config_ip = config[vector_serial]['ip']
+    except:
+        # prompt for data to write config if it does not exist yet
+        print('Config file not found.\n\nAn ip address must be registered to continue:\n\n1. Plug in the USB cord of Vector\'s charger for power.\n2. Start up Vector by pressing the button on his back once.\n3. Put your Vector on his charger.\n4. Raise his arm above his head and bring it down again.\n5. Enter the displayed ip address (XXX.XXX.XXX.XXX): ')
+        enter_ip()
+    
+        print('6. Enter the displayed serial number (8 characters): ')
+        enter_serial()
     vector_mac = get_mac(vector_config_ip)
     print('\nip:', vector_config_ip, '\nserial:', vector_serial, '\nmac:', str(vector_mac), '\n')
     vector = {
