@@ -10,7 +10,7 @@ This program helps scanning for a Vector on a roaming DHCP server. When running 
 ```
 git clone https://github.com/GrinningHermit/Vector-IP-Scanner
 cd Vector-IP-Scanner
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --user
 python3 vector_ip_scanner.py
 
 ```
