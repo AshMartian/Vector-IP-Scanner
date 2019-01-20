@@ -1,11 +1,18 @@
 # Vector-IP-Scanner
-An ip scanner for Anki's robot Vector to alleviate a changing ip address on a roaming DHCP server.
+An ip scanner for Anki's robot Vector to alleviate a changing ip address on a roaming DHCP server or needing to find the IP on new networks.
 
-This program helps scanning for a Vector on a roaming DHCP server. When running for the first time, it will prompt for the ip address and serial. Once a correct ip is given, the MAC address is saved. Every next time the program is run, it will search the ip range of the last known working ip address. If it has changed, it will use Anki's configure.py to set the new ip. 
+This program helps scanning for a Vector on a roaming DHCP server. When running for the first time, it will prompt for the ip address and serial if not found in `~/.anki_vector/sdk_config.ini`. Once a correct ip is given, the MAC address is saved. Every time the program is run, it will check the live ip/mac against the known Mac address. If the live mac address does not match Vector's, it will loop over all network interface subnets (255 per subnet) and will stop when Vector's mac address is found. If the IP has changed, it will use Anki's configure.py to set the new ip. 
 
-Notes:
-- Only the first 50 ip's are scanned by default. Change the value of ip_range_max if more range or speed is needed.
-- This program does not make things easier when changing to a different network, like changing from 192.168.0.XXX to 10.178.0.XXX Delete ipscanner_config.json if you do, then run this program again.
-- Tested on Mac with SDK 0.5.0, untested on Linux and Windows.
-- Some error messages can occur during scanning ('ping: sendto: No route to host'), they have no effect on the result.
-- Sometimes the MAC address is not picked up, unable to determine what causes this so far.
+
+
+# Installation
+
+```
+git clone https://github.com/GrinningHermit/Vector-IP-Scanner
+cd Vector-IP-Scanner
+pip3 install -r requirements.txt
+python3 vector_ip_scanner.py
+
+```
+
+Tested on Linux and Mac, Windows should work but your mileage may vary.
