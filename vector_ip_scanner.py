@@ -29,6 +29,9 @@ from getmac import get_mac_address
 import configparser
 from pathlib import Path
 from netifaces import interfaces, ifaddresses, AF_INET
+from platform   import system as system_name  # Returns the system/OS name
+from subprocess import call   as system_call  # Execute a shell command
+import os
 
 
 # Setup config parser for reading the sdk config
@@ -36,25 +39,8 @@ config = configparser.ConfigParser()
 
 ip_range_max = 255
 vector_ip = ''
-get_mac_count = 0
 
 vector_config_ip = None
-
-def get_mac(ip):
-    global get_mac_count
-    get_mac_count = get_mac_count + 1
-    if get_mac_count < 10:
-        try:
-            # Display mac address of found host. Trying a couple of times as the process seems to fail sometimes
-            return get_mac_address(ip=ip, network_request=True)
-
-        except:
-            print('no mac id found, retrying')
-            time.sleep(0.5)
-            get_mac(ip)
-    else: 
-        get_mac_count = 0
-        return 'mac address not found'
 
 def enter_ip():
     global vector_config_ip
@@ -107,7 +93,7 @@ def readSDKConfig():
 
 def saveJson():
     global vector_config_ip, vector_serial, vector_mac
-    vector_mac = get_mac(vector_config_ip)
+    vector_mac = get_mac_address(ip=vector_config_ip, network_request=True)
     print('\nip:', vector_config_ip, '\nserial:', vector_serial, '\nmac:', str(vector_mac), '\n')
     vector = {
         '0': {
@@ -155,20 +141,51 @@ elif not vector_sdk_ip == vector_config_ip:
 
 print("No good IP found, searching...")
 
+def ping(host):
+    """
+    Credit: https://stackoverflow.com/a/32684938/5460704
+    Returns True if host (str) responds to a ping request.
+    Remember that a host may not respond to a ping (ICMP) request even if the host name is valid.
+    """
+
+    # Ping command count option as function of OS
+    param = '-n' if system_name().lower()=='windows' else '-c'
+
+    # Building the command. Ex: "ping -c 1 google.com"
+    command = ['ping', param, '1', host, ]
+
+    # Pinging
+    return system_call(command, stdout=open(os.devnull, 'wb')) == 0
+
+def get_mac(ip, iface, count):
+    if count < 10:
+        try:
+            # Display mac address of found host. Trying a couple of times as the process seems to fail sometimes
+            mac = get_mac_address(ip=ip, network_request=True, interface=iface)
+            while mac == None and count < 10:
+                mac = get_mac_address(ip=ip, network_request=True, interface=iface)
+                count = count + 1
+                time.sleep(0.5)
+            return mac
+        except:
+            print('no mac id found, retrying')
+            time.sleep(0.5)
+            return get_mac(ip, iface, count)
+    else:
+        count = 0
+        return 'mac address not found'
+
 vector_ip = ''
-def ipscan(ip, q, ip_range):
+def ipscan(ip, q, ip_range, iface):
     global vector_ip, have_ip
     if vector_ip == '':
          ip_address = ip_range + '.' + str(ip)
 
          try:
              # Ping each possible host
-             ping = Popen(['ping', '-c', '3', ip_address, '-W', '1000'], stdout=PIPE)
-             output = ping.communicate()[0]
-             hostalive = ping.returncode 
-             if hostalive == 0: 
+             if ping(ip_address): 
                  # Display mac address of found hosts
-                 mac = get_mac(ip_address)
+                 mac = get_mac(ip_address, iface, 0)
                  print(ip_address + ' ' + mac)
                  if vector_mac == mac:
                      vector_ip = ip_address
@@ -179,16 +196,17 @@ def ipscan(ip, q, ip_range):
                      have_ip.release()
 
          except Exception as e:
-             print(ip_address + ' thread failed ' + e)     
+             print(ip_address + ' thread failed ')
+             print(e)
 
 print_lock = threading.Lock()
 q = Queue()
 have_ip = threading.Condition()
 # The threader thread pulls an worker from the queue and processes it
-def threader(ip_range, q):
+def threader(ip_range, iface, q):
     while True:
         worker = q.get()
-        ipscan(worker, q, ip_range)
+        ipscan(worker, q, ip_range, iface)
         q.task_done()
 
 # Check what time the scan started
@@ -197,25 +215,28 @@ t1 = datetime.now()
 # Creating threads to make the ip scanning go faster
 try:
     ranges_found = []
+    start = time.time()
     print("-" * 60)
     for ifaceName in interfaces():
-        if 'lo' in ifaceName:
-            continue
-        addrs = ifaddresses(ifaceName)
-        my_ip = addrs[AF_INET][0]['addr']
-        ip_range = re.search(r"([^.]*.[^.]*.[^.]*)", my_ip).groups()[0]
-        if ip_range not in ranges_found:
-            ranges_found.append(ip_range)
-        else:
+        try:
+            if 'lo' in ifaceName:
+                continue
+            addrs = ifaddresses(ifaceName)
+            my_ip = addrs[AF_INET][0]['addr']
+            ip_range = re.search(r"([^.]*.[^.]*.[^.]*)", my_ip).groups()[0]
+            if ip_range not in ranges_found:
+                ranges_found.append(ip_range)
+            else:
+                continue
+        except:
             continue
         print("Scanning remote hosts at: " + ip_range + ".(1-" + str(ip_range_max) + "), please wait.")
         # allowed number of threads
         for x in range(30):
-            t = threading.Thread(target=threader, args=(ip_range, q))
+            t = threading.Thread(target=threader, args=(ip_range, ifaceName, q))
             t.daemon = True
             t.start()
     
-        start = time.time()
     
         # ip numbers being checked.
         for worker in range(1,ip_range_max):
