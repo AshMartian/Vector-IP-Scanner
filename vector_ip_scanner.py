@@ -3,14 +3,11 @@
 """
 ***Vector IP scanner***
 
-This program helps scanning for a Vector on a roaming DHCP server. When running for the first time, it will prompt for the ip address and serial. Once a correct ip is given, the MAC address is saved. Every next time the program is run, it will search the ip range of the last known working ip address. If it has changed, it will use Anki's configure.py to set the new ip. 
-
-Notes:
-- Make sure the file 'vector_ip_scanner.py' is in the same directory as Anki's SDK configure.py
-- Only the first 50 ip's are scanned by default. Change the value of ip_range_max if more range or speed is needed.
-- This program does not make things easier when changing to a different network, like changing from 192.168.0.XXX to 10.178.0.XXX (delete ipscanner_config.json if you do, then run this program again).
-- Tested on Mac with SDK 0.5.0, untested on Linux and Windows.
-- Some error messages can occur during scanning ('ping: sendto: No route to host'), they have no effect on the result.
+This program helps scanning for a Vector on a roaming DHCP server. 
+When running for the first time, it will prompt for the ip address and serial if not found in '~/.anki_vector/sdk_config.ini'. 
+Once a correct ip is given or found, the MAC address is saved. Every time the program is run, it will check the live ip/mac against the known Mac address. 
+If the live mac address does not match Vector's, it will loop over all network interface subnets (255 per subnet) and will stop when Vector's mac address is found. 
+If the IP has changed, it will use Anki's configure.py to set the new ip. 
 
 Author: GrinningHermit
 
@@ -40,6 +37,8 @@ config = configparser.ConfigParser()
 ip_range_max = 255
 vector_ip = ''
 get_mac_count = 0
+
+vector_config_ip = None
 
 def get_mac(ip):
     global get_mac_count
@@ -75,13 +74,17 @@ def enter_serial():
 
 def readJson():
     global vector, vector_mac, vector_serial, vector_config_ip
-    with open('ipscanner_config.json') as json_data_file:
-        vector = json.load(json_data_file)
-        vector_mac = vector['0']['mac']
-        vector_config_ip = vector['0']['ip']
-        vector_serial = vector['0']['serial']
-        print('Json file loaded\n')
-        print(vector_config_ip)
+    try:
+        with open('ipscanner_config.json') as json_data_file:
+            vector = json.load(json_data_file)
+            vector_mac = vector['0']['mac']
+            vector_config_ip = vector['0']['ip']
+            vector_serial = vector['0']['serial']
+            print('Json file loaded\n')
+            print(vector_config_ip)
+    except FileNotFoundError as e:
+        print('Json file not found, trying sdk config')
+        pass
 
 def readSDKConfig():
     global vector_serial, vector_config_ip, vector_sdk_ip
@@ -95,6 +98,8 @@ def readSDKConfig():
         pass
     if vector_sdk_ip == None:
         print("vector IP not found in sdk config")
+    elif vector_config_ip == None:
+        vector_config_ip = vector_sdk_ip
     elif not vector_config_ip == vector_sdk_ip:
         print("vector IP not the same as the SDK IP")
     else:
@@ -118,7 +123,7 @@ def saveJson():
 try:
     readJson()
     readSDKConfig()
-    if not vector_config_ip or not vector_serial or not vector_mac:
+    if vector_config_ip == None or not vector_serial or not vector_mac:
         raise Exception('Could not find ip/serial/mac')
 except:
     print("Loaded configs, but there was a mismatch or error")
